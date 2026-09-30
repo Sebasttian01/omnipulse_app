@@ -1,121 +1,417 @@
+import 'dart:async';
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
+import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 
 void main() {
-  runApp(const MyApp());
+  FlutterBluePlus.setLogLevel(LogLevel.none, color: false);
+  runApp(const OhmMeterApp());
 }
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+class OhmMeterApp extends StatelessWidget {
+  const OhmMeterApp({super.key});
 
-  // This widget is the root of your application.
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Flutter Demo',
-      theme: ThemeData(
-        // This is the theme of your application.
-        //
-        // TRY THIS: Try running your application with "flutter run". You'll see
-        // the application has a purple toolbar. Then, without quitting the app,
-        // try changing the seedColor in the colorScheme below to Colors.green
-        // and then invoke "hot reload" (save your changes or press the "hot
-        // reload" button in a Flutter-supported IDE, or press "r" if you used
-        // the command line to start the app).
-        //
-        // Notice that the counter didn't reset back to zero; the application
-        // state is not lost during the reload. To reset the state, use hot
-        // restart instead.
-        //
-        // This works for code too, not just values: Most code changes can be
-        // tested with just a hot reload.
-        colorScheme: .fromSeed(seedColor: Colors.deepPurple),
+      title: 'Óhmetro IoT',
+      theme: ThemeData.dark().copyWith(
+        primaryColor: Colors.green,
+        colorScheme: const ColorScheme.dark(
+          primary: Colors.green,
+          secondary: Colors.lightGreenAccent,
+        ),
       ),
-      home: const MyHomePage(title: 'Flutter Demo Home Page'),
+      home: const ScanScreen(),
     );
   }
 }
 
-class MyHomePage extends StatefulWidget {
-  const MyHomePage({super.key, required this.title});
-
-  // This widget is the home page of your application. It is stateful, meaning
-  // that it has a State object (defined below) that contains fields that affect
-  // how it looks.
-
-  // This class is the configuration for the state. It holds the values (in this
-  // case the title) provided by the parent (in this case the App widget) and
-  // used by the build method of the State. Fields in a Widget subclass are
-  // always marked "final".
-
-  final String title;
+// ==========================================
+// PANTALLA 1: ESCÁNER DE DISPOSITIVOS BLE
+// ==========================================
+class ScanScreen extends StatefulWidget {
+  const ScanScreen({super.key});
 
   @override
-  State<MyHomePage> createState() => _MyHomePageState();
+  State<ScanScreen> createState() => _ScanScreenState();
 }
 
-class _MyHomePageState extends State<MyHomePage> {
-  int _counter = 0;
+class _ScanScreenState extends State<ScanScreen> {
+  List<ScanResult> scanResults = [];
+  bool isScanning = false;
+  late StreamSubscription<List<ScanResult>> scanSub;
 
-  void _incrementCounter() {
-    setState(() {
-      // This call to setState tells the Flutter framework that something has
-      // changed in this State, which causes it to rerun the build method below
-      // so that the display can reflect the updated values. If we changed
-      // _counter without calling setState(), then the build method would not be
-      // called again, and so nothing would appear to happen.
-      _counter++;
+  @override
+  void initState() {
+    super.initState();
+    scanSub = FlutterBluePlus.scanResults.listen((results) {
+      setState(() => scanResults = results);
     });
   }
 
   @override
+  void dispose() {
+    scanSub.cancel();
+    super.dispose();
+  }
+
+  void startScan() async {
+    setState(() => isScanning = true);
+    await FlutterBluePlus.startScan(timeout: const Duration(seconds: 5));
+    await Future.delayed(const Duration(seconds: 5));
+    setState(() => isScanning = false);
+  }
+
+  @override
   Widget build(BuildContext context) {
-    // This method is rerun every time setState is called, for instance as done
-    // by the _incrementCounter method above.
-    //
-    // The Flutter framework has been optimized to make rerunning build methods
-    // fast, so that you can just rebuild anything that needs updating rather
-    // than having to individually change instances of widgets.
+    return Scaffold(
+      appBar: AppBar(title: const Text('Buscar ESP32')),
+      body: Column(
+        children: [
+          const SizedBox(height: 20),
+          // ESPACIO RESERVADO PARA EL LOGO DE LA UIS
+          Container(
+            height: 100,
+            width: 100,
+            decoration: BoxDecoration(
+              color: Colors.grey[800],
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: const Center(
+              child: Text('LOGO\nUIS', textAlign: TextAlign.center),
+            ),
+          ),
+          const SizedBox(height: 20),
+
+          // BOTÓN DE ESCÁNER REAL
+          ElevatedButton.icon(
+            onPressed: isScanning ? null : startScan,
+            icon: isScanning
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.bluetooth_searching),
+            label: Text(isScanning ? 'Buscando...' : 'Buscar Dispositivos'),
+          ),
+          const SizedBox(height: 10),
+
+          // NUEVO BOTÓN: PROBAR INTERFAZ SIN ESP32
+          TextButton.icon(
+            onPressed: () {
+              // Navega a la pantalla 2 enviando un dispositivo nulo (Modo Simulación)
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const DeviceScreen(device: null),
+                ),
+              );
+            },
+            icon: const Icon(Icons.phone_android, color: Colors.grey),
+            label: const Text(
+              'Probar Interfaz sin ESP32',
+              style: TextStyle(color: Colors.grey),
+            ),
+          ),
+
+          const Divider(height: 30),
+          Expanded(
+            child: ListView.builder(
+              itemCount: scanResults.length,
+              itemBuilder: (context, index) {
+                final device = scanResults[index].device;
+                return ListTile(
+                  title: Text(
+                    device.advName.isEmpty
+                        ? 'Dispositivo Desconocido'
+                        : device.advName,
+                  ),
+                  subtitle: Text(device.remoteId.toString()),
+                  trailing: ElevatedButton(
+                    child: const Text('Conectar'),
+                    onPressed: () {
+                      FlutterBluePlus.stopScan();
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => DeviceScreen(device: device),
+                        ),
+                      );
+                    },
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ==========================================
+// PANTALLA 2: MEDICIÓN, TELEMETRÍA Y CONTROL
+// ==========================================
+class DeviceScreen extends StatefulWidget {
+  // Ahora el dispositivo puede ser nulo para permitir el Modo Simulación
+  final BluetoothDevice? device;
+  const DeviceScreen({super.key, required this.device});
+
+  @override
+  State<DeviceScreen> createState() => _DeviceScreenState();
+}
+
+class _DeviceScreenState extends State<DeviceScreen> {
+  final String serviceUuid = "4fafc201-1fb5-459e-8fcc-c5c9c331914b";
+  final String charNotifyUuid = "beb5483e-36e1-4688-b7f5-ea07361b26a8";
+  final String charWriteUuid = "beb5483f-36e1-4688-b7f5-ea07361b26a8";
+
+  BluetoothCharacteristic? notifyChar;
+  BluetoothCharacteristic? writeChar;
+  StreamSubscription? charSub;
+
+  bool isConnected = false;
+  bool isMeasuring = false;
+
+  double resistanceValue = 0.0;
+  int batteryLevel = 85; // Valor por defecto visual
+  bool isCharging = true; // Valor por defecto visual
+  int chargeTime = 30; // Valor por defecto visual
+
+  List<String> history = [];
+
+  @override
+  void initState() {
+    super.initState();
+    // Solo intenta conectar si hay un dispositivo real enviado desde el escáner
+    if (widget.device != null) {
+      connectToDevice();
+    }
+  }
+
+  void connectToDevice() async {
+    try {
+      await widget.device!.connect();
+      setState(() => isConnected = true);
+      discoverServices();
+    } catch (e) {
+      debugPrint("Error conectando: $e");
+    }
+  }
+
+  void discoverServices() async {
+    List<BluetoothService> services = await widget.device!.discoverServices();
+    for (var service in services) {
+      if (service.uuid.toString() == serviceUuid) {
+        for (var char in service.characteristics) {
+          if (char.uuid.toString() == charNotifyUuid) {
+            notifyChar = char;
+            await notifyChar!.setNotifyValue(true);
+            charSub = notifyChar!.onValueReceived.listen((value) {
+              parseIncomingData(value);
+            });
+          }
+          if (char.uuid.toString() == charWriteUuid) {
+            writeChar = char;
+          }
+        }
+      }
+    }
+  }
+
+  void parseIncomingData(List<int> value) {
+    if (value.isEmpty) return;
+    String dataString = utf8.decode(value);
+    List<String> parts = dataString.split(',');
+
+    if (parts.length == 4) {
+      setState(() {
+        resistanceValue = double.tryParse(parts[0]) ?? 0.0;
+        batteryLevel = int.tryParse(parts[1]) ?? 0;
+        isCharging = (parts[2] == '1');
+        chargeTime = int.tryParse(parts[3]) ?? 0;
+      });
+
+      if (isMeasuring) {
+        String timestamp =
+            "${DateTime.now().hour}:${DateTime.now().minute.toString().padLeft(2, '0')}:${DateTime.now().second.toString().padLeft(2, '0')}";
+        history.insert(
+          0,
+          "[$timestamp] Medición: ${resistanceValue.toStringAsFixed(4)} Ω",
+        );
+      }
+    }
+  }
+
+  void toggleMeasurement() async {
+    setState(() {
+      isMeasuring = !isMeasuring;
+    });
+
+    // Simulador visual si no hay ESP32 conectado
+    if (widget.device == null || !isConnected) {
+      if (isMeasuring) {
+        // Agrega un dato de prueba al historial
+        String timestamp =
+            "${DateTime.now().hour}:${DateTime.now().minute.toString().padLeft(2, '0')}:${DateTime.now().second.toString().padLeft(2, '0')}";
+        history.insert(0, "[$timestamp] Prueba UI: 0.4500 Ω");
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Modo Simulación: ESP32 no está conectado.'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+      return;
+    }
+
+    // Código real si hay ESP32
+    if (writeChar != null && isConnected) {
+      String command = isMeasuring ? "1" : "0";
+      await writeChar!.write(utf8.encode(command), withoutResponse: true);
+    }
+  }
+
+  @override
+  void dispose() {
+    charSub?.cancel();
+    widget.device?.disconnect(); // El ? evita errores si el device es null
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // Determinar el título basado en si es simulación o dispositivo real
+    String titleText = widget.device == null
+        ? "Modo Simulación"
+        : (widget.device!.advName.isEmpty
+              ? "Dispositivo"
+              : widget.device!.advName);
+
     return Scaffold(
       appBar: AppBar(
-        // TRY THIS: Try changing the color here to a specific color (to
-        // Colors.amber, perhaps?) and trigger a hot reload to see the AppBar
-        // change color while the other colors stay the same.
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        // Here we take the value from the MyHomePage object that was created by
-        // the App.build method, and use it to set our appbar title.
-        title: Text(widget.title),
+        title: Text(titleText),
+        actions: [
+          Center(
+            child: Padding(
+              padding: const EdgeInsets.only(right: 16.0),
+              child: Text(
+                widget.device == null
+                    ? "SIMULACIÓN"
+                    : (isConnected ? "CONECTADO" : "CONECTANDO..."),
+                style: TextStyle(
+                  color: widget.device == null
+                      ? Colors.blue
+                      : (isConnected ? Colors.green : Colors.orange),
+                  fontWeight: FontWeight.bold,
+                  fontSize: 12,
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
-      body: Center(
-        // Center is a layout widget. It takes a single child and positions it
-        // in the middle of the parent.
+      body: Padding(
+        padding: const EdgeInsets.all(16.0),
         child: Column(
-          // Column is also a layout widget. It takes a list of children and
-          // arranges them vertically. By default, it sizes itself to fit its
-          // children horizontally, and tries to be as tall as its parent.
-          //
-          // Column has various properties to control how it sizes itself and
-          // how it positions its children. Here we use mainAxisAlignment to
-          // center the children vertically; the main axis here is the vertical
-          // axis because Columns are vertical (the cross axis would be
-          // horizontal).
-          //
-          // TRY THIS: Invoke "debug painting" (choose the "Toggle Debug Paint"
-          // action in the IDE, or press "p" in the console), to see the
-          // wireframe for each widget.
-          mainAxisAlignment: .center,
           children: [
-            const Text('You have pushed the button this many times:'),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.grey[850],
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    children: [
+                      Icon(
+                        isCharging
+                            ? Icons.battery_charging_full
+                            : Icons.battery_std,
+                        color: Colors.green,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Batería: $batteryLevel%',
+                        style: const TextStyle(fontSize: 16),
+                      ),
+                    ],
+                  ),
+                  if (isCharging)
+                    Text(
+                      'Faltan: $chargeTime min',
+                      style: const TextStyle(color: Colors.greenAccent),
+                    ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 30),
+            const Text(
+              'RESISTENCIA',
+              style: TextStyle(letterSpacing: 2, color: Colors.grey),
+            ),
             Text(
-              '$_counter',
-              style: Theme.of(context).textTheme.headlineMedium,
+              '${resistanceValue.toStringAsFixed(4)} Ω',
+              style: const TextStyle(
+                fontSize: 56,
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
+              ),
+            ),
+            const SizedBox(height: 30),
+            ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: isMeasuring ? Colors.red : Colors.green,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 40,
+                  vertical: 15,
+                ),
+              ),
+              onPressed: toggleMeasurement,
+              icon: Icon(
+                isMeasuring ? Icons.stop : Icons.play_arrow,
+                color: Colors.black,
+              ),
+              label: Text(
+                isMeasuring ? 'DETENER MEDICIÓN' : 'INICIAR MEDICIÓN',
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.black,
+                ),
+              ),
+            ),
+            const SizedBox(height: 30),
+            const Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                'HISTORIAL',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: Colors.grey,
+                ),
+              ),
+            ),
+            const Divider(),
+            Expanded(
+              child: ListView.builder(
+                itemCount: history.length,
+                itemBuilder: (context, index) {
+                  return ListTile(
+                    leading: const Icon(Icons.history, color: Colors.green),
+                    title: Text(history[index]),
+                  );
+                },
+              ),
             ),
           ],
         ),
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _incrementCounter,
-        tooltip: 'Increment',
-        child: const Icon(Icons.add),
       ),
     );
   }
