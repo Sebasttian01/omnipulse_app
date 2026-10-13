@@ -73,17 +73,15 @@ class _ScanScreenState extends State<ScanScreen> {
           const SizedBox(height: 20),
           // ESPACIO RESERVADO PARA EL LOGO DE LA UIS
           Container(
-            height: 100,
-            width: 100,
+            height: 250,
+            width: 250,
             decoration: BoxDecoration(
               color: Colors.grey[800],
               borderRadius: BorderRadius.circular(10),
             ),
-            child: const Center(
-              child: Text('LOGO\nUIS', textAlign: TextAlign.center),
-            ),
+            child: Image.asset('assets/LOGO_UIS_PNG.png', fit: BoxFit.contain),
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 50),
 
           // BOTÓN DE ESCÁNER REAL
           ElevatedButton.icon(
@@ -194,11 +192,30 @@ class _DeviceScreenState extends State<DeviceScreen> {
 
   void connectToDevice() async {
     try {
-      await widget.device!.connect();
+      // autoConnect: false fuerza la conexión inmediata y evita cuelgues
+      // timeout: Si a los 10 segundos no conecta, aborta.
+      await widget.device!.connect(
+        autoConnect: false,
+        timeout: const Duration(seconds: 10),
+      );
+
       setState(() => isConnected = true);
       discoverServices();
     } catch (e) {
       debugPrint("Error conectando: $e");
+      // Si falla, mostramos un aviso y devolvemos al usuario al escáner
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Error al conectar. Reinicia el Bluetooth del celular.',
+            ),
+            backgroundColor: Colors.red,
+            duration: Duration(seconds: 3),
+          ),
+        );
+        Navigator.pop(context); // Cierra la pantalla y vuelve a la lista
+      }
     }
   }
 
@@ -240,7 +257,7 @@ class _DeviceScreenState extends State<DeviceScreen> {
             "${DateTime.now().hour}:${DateTime.now().minute.toString().padLeft(2, '0')}:${DateTime.now().second.toString().padLeft(2, '0')}";
         history.insert(
           0,
-          "[$timestamp] Medición: ${resistanceValue.toStringAsFixed(4)} Ω",
+          "[$timestamp] Medición: ${resistanceValue.toStringAsFixed(2)} mΩ",
         );
       }
     }
@@ -272,7 +289,7 @@ class _DeviceScreenState extends State<DeviceScreen> {
     // Código real si hay ESP32
     if (writeChar != null && isConnected) {
       String command = isMeasuring ? "1" : "0";
-      await writeChar!.write(utf8.encode(command), withoutResponse: true);
+      await writeChar!.write(utf8.encode(command), withoutResponse: false);
     }
   }
 
@@ -357,7 +374,7 @@ class _DeviceScreenState extends State<DeviceScreen> {
               style: TextStyle(letterSpacing: 2, color: Colors.grey),
             ),
             Text(
-              '${resistanceValue.toStringAsFixed(4)} Ω',
+              '${resistanceValue.toStringAsFixed(2)} mΩ',
               style: const TextStyle(
                 fontSize: 56,
                 fontWeight: FontWeight.bold,
