@@ -67,7 +67,7 @@ class _ScanScreenState extends State<ScanScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Buscar ESP32')),
+      appBar: AppBar(title: const Text('Mili-Óhmetro IoT')),
       body: Column(
         children: [
           const SizedBox(height: 20),
@@ -86,14 +86,38 @@ class _ScanScreenState extends State<ScanScreen> {
           // BOTÓN DE ESCÁNER REAL
           ElevatedButton.icon(
             onPressed: isScanning ? null : startScan,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.green, // Fondo verde para el botón
+              foregroundColor: Colors.black, // Color para el texto y el ícono
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(
+                  5,
+                ), // Bordes redondeados de 5px
+              ),
+              padding: const EdgeInsets.symmetric(
+                horizontal: 20,
+                vertical: 12,
+              ), // Tamaño del botón
+            ),
             icon: isScanning
                 ? const SizedBox(
                     width: 20,
                     height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2),
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color:
+                          Colors.black, // Color del progreso para que contraste
+                    ),
                   )
                 : const Icon(Icons.bluetooth_searching),
-            label: Text(isScanning ? 'Buscando...' : 'Buscar Dispositivos'),
+            label: Text(
+              isScanning ? 'Buscando...' : 'Buscar ESP32',
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                // Limpiamos las propiedades incorrectas de aquí
+              ),
+            ),
           ),
           const SizedBox(height: 10),
 
@@ -110,7 +134,7 @@ class _ScanScreenState extends State<ScanScreen> {
             },
             icon: const Icon(Icons.phone_android, color: Colors.grey),
             label: const Text(
-              'Probar Interfaz sin ESP32',
+              'Probar Interfaz',
               style: TextStyle(color: Colors.grey),
             ),
           ),
